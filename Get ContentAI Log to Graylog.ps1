@@ -68,13 +68,25 @@ function LastCheckedRow {
 
 # Функция определения свежей архивной копии 
 function GetArchiveDbFileName {
-    try{
-        $firstNewFile = Get-ChildItem -Path $pathToArchiveDbFolder | Sort-Object LastWriteTime | Select-Object -First 1
-        Add-Content -Path $scriptLog -Value "$(CurrantDate) | Info | Свежий файл архива: $($firstNewFile)"
-        return $firstNewFile
-    }
+    try {
+        $directoryInfo = Get-ChildItem $pathToArchiveDbFolder | Measure-Object
+        if($directoryInfo.count -gt 0) {
+            try{
+                $firstNewFile = Get-ChildItem -Path $pathToArchiveDbFolder | Sort-Object LastWriteTime | Select-Object -First 1
+                Add-Content -Path $scriptLog -Value "$(CurrantDate) | Info | Свежий файл архива: $($firstNewFile)"
+                return $firstNewFile
+            }
+            catch{
+                Add-Content -Path $scriptLog -Value "$(CurrantDate) | Error | Не удалось определить архивный файл по пути $($pathToArchiveDbFolder). Текст ошибки: $($Error[0])"
+            }
+        }
+        else {
+            Add-Content -Path $scriptLog -Value "$(CurrantDate) | Info | Архив не найден"
+            return "NoFile"
+        }
+    }    
     catch{
-        Add-Content -Path $scriptLog -Value "$(CurrantDate) | Error | Ошибка определения свежего архивного файла, возможно нет ни одного файла по пути $($pathToArchiveDbFolder). Текст ошибки: $($Error[0])"
+        Add-Content -Path $scriptLog -Value "$(CurrantDate) | Error | Ошибка выполнения функции GetArchiveDbFileName. Текст ошибки: $($Error[0])"
         break
     }
 }
@@ -188,12 +200,21 @@ try{
     if ([int]$lastCheckedRow -gt "$([int]$dbLastRow)") {
         Add-Content -Path $scriptLog -Value "$(CurrantDate) | Info | Значение $($lastCheckedRow) в файле больше значения БД - ищем архив, дописываем дозабираем данные с него и обнуляем файл"
         $lastArchive = GetArchiveDbFileName
-        GetDataAndWriteToGraylog -FileName "$($pathToArchiveDbFolder)/$($lastArchive)" -Row "$($lastCheckedRow)"
-        "0" | Set-Content -Path $tableLastRow -NoNewline
-        Add-Content -Path $scriptLog -Value "$(CurrantDate) | Info | Архив $($lastArchive) обошел - берусь за свежу новую базу $($pathToDb)"
-        $newLastRow = LastCheckedRow
-        GetDataAndWriteToGraylog -FileName "$($pathToDb)" -Row "$($newLastRow)"  
-        "$($dbLastRow)" | Set-Content -Path "$($tableLastRow)" -NoNewline
+        if ($lastArchive -eq "NoFile"){
+            Add-Content -Path $scriptLog -Value "$(CurrantDate) | Info | Архивный файл отсутствует - берусь за новую базу $($pathToDb)"
+            "0" | Set-Content -Path $tableLastRow -NoNewline
+            $newLastRow = LastCheckedRow
+            GetDataAndWriteToGraylog -FileName "$($pathToDb)" -Row "$($newLastRow)"  
+            "$($dbLastRow)" | Set-Content -Path "$($tableLastRow)" -NoNewline
+        }
+        else{
+            GetDataAndWriteToGraylog -FileName "$($pathToArchiveDbFolder)/$($lastArchive)" -Row "$($lastCheckedRow)"
+            "0" | Set-Content -Path $tableLastRow -NoNewline
+            Add-Content -Path $scriptLog -Value "$(CurrantDate) | Info | Архив $($lastArchive) обошел - берусь за свежу новую базу $($pathToDb)"
+            $newLastRow = LastCheckedRow
+            GetDataAndWriteToGraylog -FileName "$($pathToDb)" -Row "$($newLastRow)"  
+            "$($dbLastRow)" | Set-Content -Path "$($tableLastRow)" -NoNewline
+        }
     }
     else {
         Add-Content -Path $scriptLog -Value "$(CurrantDate) | Info | Значение $($lastCheckedRow) в файле меньше или равно значению БД - работаем с текущей БД"
