@@ -141,7 +141,7 @@ function GetDataAndWriteToGraylog {
         ForEach ($item in $array){
             $message = $item.Split("|")
             $logDate = $message[2].Trim() -replace '.{7}$'
-            $logDateTime = [DateTime]::ParseExact($logDate, 'dd.MM.yyyy HH:mm:ss.ff', [System.Globalization.CultureInfo]::InvariantCulture) 
+            $logDateTime = [DateTime]::ParseExact($logDate, 'dd.MM.yyyy HH:mm:ss', [System.Globalization.CultureInfo]::InvariantCulture) 
             Send-PSGelfTCP -GelfServer "$($graylogServer)" -Port "$($graylogServerPort)" -ShortMessage "$($message[3])" -FullMessage "$($message[0]) $($message[2]) $($message[3])" -HostName $($hostName) -DateTime $logDateTime -AdditionalField @{OCRType = "$($message[0])"}   
         }
         return $array.Count
